@@ -49,6 +49,19 @@ shows about 50 ms. If no confirmation arrives within a bound well inside the
 CSMS response timeout, the answer is Rejected and the limit is cancelled.
 Before a session, a TxDefaultProfile is kept and applied at plug-in.
 
+## Runtime (`bridge.py`, `station.py`)
+
+- Feed cursor stored in the state directory. On the first start the bridge
+  follows from the current end; history is not replayed.
+- An outbox per station (up to 2000 messages) keeps messages while the CSMS
+  connection is down; reconnection backs off from 1 s to 60 s.
+- A station already in a session when the bridge starts reports Occupied;
+  its OCPP transaction begins at the next plug-in.
+- Limits are re-sent before Imatra's duration runs out while their profiles
+  stay valid. A TxProfile ends with its transaction.
+- An unconfirmed limit is answered Rejected (`NotConfirmed`), and the
+  previous limit is restored.
+
 ## Not in scope yet
 
 - Recurring and multi-period schedules (beyond the current period),
