@@ -1,0 +1,8 @@
+imatra-ocpp
+Copyright 2026 Mark Purcell
+
+This product is licensed under the Apache License, Version 2.0 (LICENSE).
+
+It connects to, but does not include, Imatra (Chargetronic,
+https://github.com/Chargetronic/imatra.iso15118_server, Apache-2.0), and uses
+the "ocpp" library by The Mobility House (MIT).
