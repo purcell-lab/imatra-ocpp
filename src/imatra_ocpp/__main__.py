@@ -11,6 +11,9 @@ from .bridge import Bridge, Config
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     logging.getLogger("websockets").setLevel(logging.WARNING)
+    # The event feed is polled every second; log failures only.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
     path = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("IMATRA_OCPP_CONFIG", "/data/options.json")
     asyncio.run(Bridge(Config.load(path)).run())
 
