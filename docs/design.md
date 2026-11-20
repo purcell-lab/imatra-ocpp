@@ -22,10 +22,14 @@
 | `session.started` (plug-in) | StatusNotification Occupied; TransactionEvent Started, CablePluggedIn, EVConnected |
 | `charging.started` / `charging.stopped` | TransactionEvent Updated, ChargingStateChanged, Charging / SuspendedEV |
 | `power.changed` | TransactionEvent Updated, MeterValuePeriodic, Power.Active.Import |
+| `ev.parameters` with `soc` (DIN 70121 read only) | TransactionEvent Updated, MeterValuePeriodic, SoC in Percent, location EV |
 | `limit.changed` | TransactionEvent Updated, ChargingRateChanged |
 | `session.ended` | TransactionEvent Ended (EVDisconnected for `ev_unplugged`), Energy.Active.Import.Register; StatusNotification Available |
 
 One plug session is one OCPP transaction; V2G sessions inside it are not.
+Imatra reads SoC only from an EV that offers DIN 70121 and not ISO 15118-2
+(at plug-in, and again when the EV stops charging by itself). ISO 15118-2 AC
+carries no SoC, so most AC sessions send no SoC sample.
 BootNotification is sent at connection, before the first event.
 
 ## Charging profiles to limits (`limits.py`)
@@ -47,7 +51,23 @@ SetChargingProfile is answered only after Imatra confirms the device applied
 the limit (`limit.applied`, or `.limit.confirmed_at` on the device). The lab
 shows about 50 ms. If no confirmation arrives within a bound well inside the
 CSMS response timeout, the answer is Rejected and the limit is cancelled.
+The device confirms by pushing a changed loop answer, so a limit equal to
+the one it already confirmed is never confirmed again. That case is answered
+Accepted at once and the limit is only renewed.
 Before a session, a TxDefaultProfile is kept and applied at plug-in.
+
+## Runtime (`bridge.py`, `station.py`)
+
+- Feed cursor stored in the state directory. On the first start the bridge
+  follows from the current end; history is not replayed.
+- An outbox per station (up to 2000 messages) keeps messages while the CSMS
+  connection is down; reconnection backs off from 1 s to 60 s.
+- A station already in a session when the bridge starts reports Occupied;
+  its OCPP transaction begins at the next plug-in.
+- Limits are re-sent before Imatra's duration runs out while their profiles
+  stay valid. A TxProfile ends with its transaction.
+- An unconfirmed limit is answered Rejected (`NotConfirmed`), and the
+  previous limit is restored.
 
 ## Not in scope yet
 

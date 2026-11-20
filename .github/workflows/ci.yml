@@ -19,3 +19,4 @@ jobs:
         run: |
           missing=$(grep -L 'SPDX-License-Identifier: Apache-2.0' $(git ls-files '*.py') || true)
           [ -z "$missing" ] || { echo "missing SPDX header: $missing"; exit 1; }
+      - run: docker build -q -t imatra-ocpp:ci .

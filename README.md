@@ -10,10 +10,44 @@ operator limits.
 CSMS (CitrineOS) <-- OCPP 2.1 / 2.0.1 --> imatra-ocpp <-- /v1 API + event feed --> Imatra <-- MQTT/mTLS --> station <-- ISO 15118-2 --> EV
 ```
 
-Status: early. The mapping core (charging profiles to limits, Imatra events
-to OCPP transactions) is written and tested. The runtime (WebSocket
-connections, the event-feed reader, confirmation handling) is next. See
+Status: first working version, lab use. Tested in one process against a mock
+CSMS and a fake Imatra API, for OCPP 2.1 and 2.0.1; run end to end with the
+Imatra server App and its test station in
+[purcell-lab/ha-addons](https://github.com/purcell-lab/ha-addons). See
 [docs/design.md](docs/design.md).
+
+## Running
+
+```bash
+docker build -t imatra-ocpp .
+docker run -v $PWD/config.json:/data/options.json imatra-ocpp
+```
+
+`config.json`:
+
+```json
+{
+  "csms_url": "ws://citrineos:8081/ocpp",
+  "csms_password": "",
+  "imatra_url": "http://imatra:8080",
+  "imatra_api_key": "...",
+  "devices": [],
+  "station_id_prefix": "IMATRA-"
+}
+```
+
+Each device becomes station `<prefix><device id>` at `<csms_url>/<station id>`.
+`devices` empty means every Imatra device. With `csms_password`, the station
+uses Basic Auth (OCPP Security Profile 1, or 2 over `wss://`).
+
+| OCPP from the CSMS | Answer |
+|---|---|
+| SetChargingProfile | Accepted once the device confirmed the limit; Rejected with a reason code otherwise |
+| ClearChargingProfile | Accepted; the limit is cancelled or recomputed |
+| GetBaseReport | Accepted, then a minimal NotifyReport |
+| GetVariables / SetVariables | UnknownComponent / Rejected (no device model yet) |
+| TriggerMessage | Boot, Heartbeat, StatusNotification |
+| RequestStart/StopTransaction, Reset | Rejected (Imatra starts on plug-in) |
 
 ## Why a separate project
 
