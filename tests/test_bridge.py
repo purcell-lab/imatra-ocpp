@@ -141,10 +141,17 @@ class BridgeEndToEnd(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(r.status, "Accepted")
             self.assertEqual(fake.calls[n:], [("DELETE", None)])
 
+            # A TxProfile still in force at session end is cancelled on the device,
+            # so the next session does not start limited.
+            r = await cp.call(mod.call.SetChargingProfile(evse_id=1, charging_profile=profile(10, tx_id)))
+            self.assertEqual(r.status, "Accepted")
+            n = len(fake.calls)
             fake.add("session.ended", reason="ev_unplugged", energy_wh=1.1)
             await until(lambda: any(m[0] == "TransactionEvent" and m[1][0] == "Ended" for m in CSMS.received), "Ended")
             ended = [m for m in CSMS.received if m[0] == "TransactionEvent"][-1][1]
             self.assertEqual(ended[1]["stopped_reason"], "EVDisconnected")
+            self.assertEqual(fake.calls[n:], [("DELETE", None)])
+            self.assertIsNone(fake.limit)
         finally:
             task.cancel()
             for t in bridge.tasks:
