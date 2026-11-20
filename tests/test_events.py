@@ -39,6 +39,20 @@ class Events(unittest.TestCase):
                            ("session.ended", {"reason": "ev_unplugged"})):
             self.assertEqual(d.apply(ev(kind, **data)), [])
 
+    def test_soc_is_an_ev_measurand(self):
+        d = Device("dev-01")
+        d.apply(ev("session.started", cp="B"))
+        tx = d.apply(ev("ev.parameters", source="din70121", soc=47))[0][1]
+        self.assertEqual((tx["eventType"], tx["triggerReason"]), ("Updated", "MeterValuePeriodic"))
+        self.assertEqual(tx["meterValue"][0]["sampledValue"][0], {
+            "value": 47, "measurand": "SoC", "unitOfMeasure": {"unit": "Percent"}, "location": "EV", "context": "Other"})
+        self.assertEqual(d.soc, 47)
+        # ISO 15118-2 gives no SoC; bad values and readings outside a session send nothing.
+        for data in ({"source": "iso15118-2", "e_amount_wh": 9000}, {"source": "din70121", "soc": 101},
+                     {"source": "din70121", "soc": True}):
+            self.assertEqual(d.apply(ev("ev.parameters", **data)), [])
+        self.assertEqual(Device("dev-02").apply(ev("ev.parameters", source="din70121", soc=50)), [])
+
     def test_offline_unavailable(self):
         self.assertEqual(Device("dev-01").apply(ev("device.offline"))[0][1]["connectorStatus"], "Unavailable")
 
