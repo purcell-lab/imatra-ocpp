@@ -90,10 +90,20 @@ class StationCore:
                     await self.imatra.clear_limit(self.device_id)
                     self.applied = None
                 return True, "cleared"
+            # The device confirms a limit by pushing a changed loop answer. A
+            # limit equal to the one it already confirmed changes nothing, so it
+            # is never confirmed again: treat it as in force and only renew it.
+            current = {}
+            if confirm:
+                current = (await self.imatra.device(self.device_id)).get("limit") or {}
+            same = (current.get("confirmed_at") and current.get("limit_a") is not None
+                    and abs(float(current["limit_a"]) - limit.limit_a) < 0.05)
             cid = await self.imatra.set_limit(self.device_id, limit.limit_a, limit.duration_s)
             self.applied = (limit.limit_a, time.monotonic() + limit.duration_s)
             if not confirm:
                 return True, f"sent {limit.limit_a} A"
+            if same:
+                return True, f"{limit.limit_a} A already in force on the device, renewed"
             confirmed = await self.imatra.wait_confirmed(self.device_id, cid, self.settings.confirm_timeout_s)
             if confirmed is None:
                 return False, f"{limit.limit_a} A not confirmed by the device in {self.settings.confirm_timeout_s:g} s"

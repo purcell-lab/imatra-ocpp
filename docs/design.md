@@ -47,6 +47,9 @@ SetChargingProfile is answered only after Imatra confirms the device applied
 the limit (`limit.applied`, or `.limit.confirmed_at` on the device). The lab
 shows about 50 ms. If no confirmation arrives within a bound well inside the
 CSMS response timeout, the answer is Rejected and the limit is cancelled.
+The device confirms by pushing a changed loop answer, so a limit equal to
+the one it already confirmed is never confirmed again. That case is answered
+Accepted at once and the limit is only renewed.
 Before a session, a TxDefaultProfile is kept and applied at plug-in.
 
 ## Runtime (`bridge.py`, `station.py`)

@@ -38,8 +38,10 @@ class FakeImatra:
             body = __import__("json").loads(request.content)
             self.calls.append(("POST", body))
             self.cid += 1
+            # Like the device: only a changed limit pushes a new loop answer and is confirmed.
+            changed = not (self.limit and self.limit["confirmed_at"] and self.limit["limit_a"] == body["limit_a"])
             self.limit = {"command_id": self.cid, "limit_a": body["limit_a"],
-                          "confirmed_at": "2026-11-19T01:00:01Z" if self.confirm else None,
+                          "confirmed_at": "2026-11-19T01:00:01Z" if self.confirm and changed else None,
                           "confirmed_via": "loop", "reaction_ms": 50}
             return httpx.Response(202, json={"command_id": self.cid})
         if path == "/v1/devices/dev-01/limit" and method == "DELETE":
@@ -128,6 +130,12 @@ class BridgeEndToEnd(unittest.IsolatedAsyncioTestCase):
             if not confirm:
                 self.assertEqual((r.status, r.status_info["reason_code"]), ("Rejected", "NotConfirmed"))
                 return
+            self.assertEqual(r.status, "Accepted")
+            self.assertEqual(fake.calls[-1], ("POST", {"limit_a": 10.0, "duration_s": 3600}))
+
+            # The same limit again changes nothing on the device, so it is never
+            # confirmed again: accepted as already in force, and renewed.
+            r = await cp.call(mod.call.SetChargingProfile(evse_id=1, charging_profile=profile(10, tx_id)))
             self.assertEqual(r.status, "Accepted")
             self.assertEqual(fake.calls[-1], ("POST", {"limit_a": 10.0, "duration_s": 3600}))
 
