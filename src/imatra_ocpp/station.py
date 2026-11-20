@@ -150,9 +150,26 @@ class StationCore:
         if kind == "session.started" and self._effective():
             asyncio.create_task(self._apply_logged())
         elif kind == "session.ended":
-            self.profiles.pop("TxProfile", None)
-            self.applied = None
+            await self._release()
         return out
+
+    async def _release(self) -> None:
+        """End of session: drop the TxProfile and cancel the limit on the device.
+
+        Without the cancel, Imatra keeps the last limit for its full duration
+        and the next session starts limited. Profiles that are still valid
+        (TxDefaultProfile, ChargingStationMaxProfile) are re-sent at the next
+        session.started.
+        """
+        async with self.lock:
+            self.profiles.pop("TxProfile", None)
+            if not self.applied:
+                return
+            try:
+                await self.imatra.clear_limit(self.device_id)
+            except ImatraError as e:
+                log.warning("%s: limit not cancelled at session end: Imatra refused: %s", self.station_id, e.status)
+            self.applied = None
 
     async def _apply_logged(self) -> None:
         async with self.lock:
