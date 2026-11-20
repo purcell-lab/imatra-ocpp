@@ -22,10 +22,14 @@
 | `session.started` (plug-in) | StatusNotification Occupied; TransactionEvent Started, CablePluggedIn, EVConnected |
 | `charging.started` / `charging.stopped` | TransactionEvent Updated, ChargingStateChanged, Charging / SuspendedEV |
 | `power.changed` | TransactionEvent Updated, MeterValuePeriodic, Power.Active.Import |
+| `ev.parameters` with `soc` (DIN 70121 read only) | TransactionEvent Updated, MeterValuePeriodic, SoC in Percent, location EV |
 | `limit.changed` | TransactionEvent Updated, ChargingRateChanged |
 | `session.ended` | TransactionEvent Ended (EVDisconnected for `ev_unplugged`), Energy.Active.Import.Register; StatusNotification Available |
 
 One plug session is one OCPP transaction; V2G sessions inside it are not.
+Imatra reads SoC only from an EV that offers DIN 70121 and not ISO 15118-2
+(at plug-in, and again when the EV stops charging by itself). ISO 15118-2 AC
+carries no SoC, so most AC sessions send no SoC sample.
 BootNotification is sent at connection, before the first event.
 
 ## Charging profiles to limits (`limits.py`)
