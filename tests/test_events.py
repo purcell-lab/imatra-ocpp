@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+import re
 import unittest
 
 from imatra_ocpp.events import Device
@@ -44,3 +45,22 @@ class Events(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Timestamps(unittest.TestCase):
+    def test_local_offset_and_microseconds_become_utc_ms(self):
+        from imatra_ocpp.events import utc
+        self.assertEqual(utc("2026-11-20T18:06:35.753255+10:00"), "2026-11-20T08:06:35.753Z")
+        self.assertEqual(utc("2026-11-19T01:00:00Z"), "2026-11-19T01:00:00.000Z")
+
+    def test_every_message_timestamp_is_utc(self):
+        d = Device("dev-01")
+        msgs = []
+        for kind, data in (("device.online", {}), ("session.started", {"cp": "B"}),
+                           ("power.changed", {"power_w": 6900}), ("session.ended", {"reason": "ev_unplugged", "energy_wh": 1.1})):
+            e = ev(kind, **data); e["time"] = "2026-11-20T18:06:35.753255+10:00"
+            msgs += d.apply(e)
+        stamps = re.findall(r"'timestamp': '([^']+)'", str(msgs))
+        self.assertTrue(stamps)
+        for s in stamps:
+            self.assertRegex(s, r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$")

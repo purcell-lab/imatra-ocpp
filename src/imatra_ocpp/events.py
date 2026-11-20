@@ -12,6 +12,22 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
+
+
+
+def utc(at: str) -> str:
+    """Imatra event time as OCPP wants it: UTC, milliseconds, "Z".
+
+    Imatra may report local offsets and microseconds (e.g.
+    2026-11-20T18:06:35.753255+10:00). CitrineOS rejects those with
+    FormatViolation, so normalise every timestamp at the edge.
+    """
+    t = datetime.fromisoformat(at.replace("Z", "+00:00"))
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return t.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
 
 EVSE = {"id": 1, "connectorId": 1}
 STOPPED_REASON = {"ev_unplugged": "EVDisconnected", "blocked": "DeAuthorized"}
@@ -52,7 +68,7 @@ class Device:
         return [{"timestamp": at, "sampledValue": [{"value": value, "measurand": measurand, "unitOfMeasure": {"unit": unit}}]}]
 
     def apply(self, event: dict) -> list[tuple[str, dict]]:
-        kind, at, data = event["type"], event["time"], event.get("data") or {}
+        kind, at, data = event["type"], utc(event["time"]), event.get("data") or {}
         out: list[tuple[str, dict]] = []
         if kind == "device.online":
             self.online = True
