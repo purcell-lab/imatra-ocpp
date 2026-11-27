@@ -12,6 +12,22 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
+
+
+
+def utc(at: str) -> str:
+    """Imatra event time as OCPP wants it: UTC, milliseconds, "Z".
+
+    Imatra may report local offsets and microseconds (e.g.
+    2026-11-20T18:06:35.753255+10:00). CitrineOS rejects those with
+    FormatViolation, so normalise every timestamp at the edge.
+    """
+    t = datetime.fromisoformat(at.replace("Z", "+00:00"))
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return t.astimezone(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
 
 EVSE = {"id": 1, "connectorId": 1}
 STOPPED_REASON = {"ev_unplugged": "EVDisconnected", "blocked": "DeAuthorized"}
@@ -25,6 +41,7 @@ class Device:
     energy_wh: float = 0.0
     charging: bool = False
     online: bool = False
+    soc: int | None = None
 
     def _tx(self, event_type: str, trigger: str, at: str, extra: dict | None = None) -> tuple[str, dict]:
         payload = {
@@ -51,8 +68,16 @@ class Device:
     def _meter(at: str, measurand: str, value: float, unit: str) -> list[dict]:
         return [{"timestamp": at, "sampledValue": [{"value": value, "measurand": measurand, "unitOfMeasure": {"unit": unit}}]}]
 
+    @staticmethod
+    def _soc(data: dict) -> int | None:
+        """The EV's SoC in %, or None. Imatra reads it only over DIN 70121."""
+        soc = data.get("soc")
+        if isinstance(soc, bool) or not isinstance(soc, (int, float)) or not 0 <= soc <= 100:
+            return None
+        return int(soc)
+
     def apply(self, event: dict) -> list[tuple[str, dict]]:
-        kind, at, data = event["type"], event["time"], event.get("data") or {}
+        kind, at, data = event["type"], utc(event["time"]), event.get("data") or {}
         out: list[tuple[str, dict]] = []
         if kind == "device.online":
             self.online = True
@@ -62,7 +87,7 @@ class Device:
             out.append(self._status("Unavailable", at))
         elif kind == "session.started":
             self.transaction_id = str(uuid.uuid4())
-            self.seq_no, self.energy_wh, self.charging = 0, 0.0, False
+            self.seq_no, self.energy_wh, self.charging, self.soc = 0, 0.0, False, None
             out.append(self._status("Occupied", at))
             out.append(self._tx("Started", "CablePluggedIn", at, {"transactionInfo": {"chargingState": "EVConnected"}}))
         elif kind == "charging.started" and self.transaction_id:
@@ -74,6 +99,11 @@ class Device:
         elif kind == "power.changed" and self.transaction_id:
             out.append(self._tx("Updated", "MeterValuePeriodic", at,
                                 {"meterValue": self._meter(at, "Power.Active.Import", data["power_w"], "W")}))
+        elif kind == "ev.parameters" and self.transaction_id and (soc := self._soc(data)) is not None:
+            self.soc = soc
+            out.append(self._tx("Updated", "MeterValuePeriodic", at, {"meterValue": [{"timestamp": at, "sampledValue": [
+                {"value": soc, "measurand": "SoC", "unitOfMeasure": {"unit": "Percent"}, "location": "EV",
+                 "context": "Other"}]}]}))
         elif kind == "limit.changed" and self.transaction_id:
             out.append(self._tx("Updated", "ChargingRateChanged", at))
         elif kind == "session.ended" and self.transaction_id:
